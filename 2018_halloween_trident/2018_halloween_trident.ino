@@ -65,10 +65,11 @@ uint8_t currentPaletteNo = 1;
 // RENDER MODES
 // ————————————————————————————————————————————————
 void (*renderers[])(void) {
-  modePaletteSimple
+  modePaletteSimple,
+  modeWave
 };
 #define N_MODES (sizeof(renderers) / sizeof(renderers[0]));
-uint8_t renderMode = 0;
+uint8_t renderMode = 1;
 
 
 
@@ -157,6 +158,51 @@ void modePaletteSimple() {
   
   fillFromPaletteSimple(ledsTrident, NUM_LEDS_TRIDENT, currentPalette);
   fillFromPaletteSimple(ledsTube, NUM_LEDS_TUBE, currentPalette);
+}
+
+void modeWave() {
+  
+  const uint8_t hue = 215; // ocean blue
+  const uint8_t defaultColor = 0xc2b280;
+  const uint8_t waveSpread = 5; // num leds in either direction from peak of wave
+  const uint16_t timeBetweenWavesMs = 2000;
+  const uint16_t framesPerSecond = 50;
+  static uint8_t maxValue = 255; // highest intensity of leds in wave (at peak)
+  static uint8_t minValue = 1; // lowest intensity of leds in wave
+
+  static uint8_t wavePeakStartIndex = waveSpread;
+  static uint8_t value[NUM_LEDS_TUBE + waveSpread*2]; // array of wave intensity values at each LED; extra indices for offscreen values (parts of wave that haven't reached first LED)
+  static uint8_t valueCount = sizeof( value) / sizeof( uint8_t ); // store size of value array
+  static uint8_t valueDelta = round(maxValue-minValue) / waveSpread; // change in intensity from one LED to next
+  
+  EVERY_N_MILLISECONDS(1000 / framesPerSecond) {
+    // wave moves forward
+    for ( uint8_t i = valueCount - 1; i>0; i-- ) {
+      value[i] = value[i-1];
+    }
+    value[0].setRGB(194, 178, 128);
+    FFE59C
+  
+    // new wave
+    EVERY_N_MILLISECONDS(timeBetweenWavesMs) {
+      uint8_t v = maxValue;
+      // peak
+      value[wavePeakStartIndex] = v;
+      // spread in both directions
+      for ( uint8_t j=1; j<= waveSpread; j++) {
+        v -= valueDelta;
+        value[wavePeakStartIndex + j] = v;
+        value[wavePeakStartIndex - j] = v;
+      }
+    }
+  
+    // fill LEDs from wave values
+    for ( uint8_t k=0; k<NUM_LEDS_TUBE; k++ ) {
+      uint8_t v = value[k + waveSpread*2];
+      ledsTube[k] = CHSV(hue, v, v); 
+    }
+  }
+      
 }
 
 
