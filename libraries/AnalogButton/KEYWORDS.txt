@@ -1,0 +1,6 @@
+AnalogButton	KEYWORD1
+adjustThreshold	KEYWORD2
+isPressed	KEYWORD2
+wasPressed	KEYWORD2
+stateChanged	KEYWORD2
+newPress	KEYWORD2
