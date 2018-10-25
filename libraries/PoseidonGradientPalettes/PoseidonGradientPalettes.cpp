@@ -28,3 +28,10 @@ DEFINE_GRADIENT_PALETTE( bhw1_greeny_gp ) {
    99,  42,255, 45,
   153,   7, 55,  8,
   255,   0,  0,  0};  
+
+
+  DEFINE_GRADIENT_PALETTE( wave ) {
+    0,   0,  0,  0,
+   42,   0, 107, 255,
+   64,   0,  0,  0,
+   255,   0,  0,  0};
