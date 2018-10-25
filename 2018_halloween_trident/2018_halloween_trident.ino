@@ -200,6 +200,8 @@ void modeWave() {
   const uint16_t offsetMs = 40;
   const uint16_t waveDelayMinMs = 2000;
   const uint16_t waveDelayMaxMs = 5000;
+
+  const uint16_t maxNoise = 5;
   
   static unsigned long lastWaveStart = 0;
   static uint16_t nextWaveDelay = waveDelayMinMs;
@@ -216,13 +218,24 @@ void modeWave() {
     while (true) {
       if ( millis() > waveStart) { // has wave started yet?
         unsigned long waveOffset = ( millis() - waveStart ) / 6;
+        
         if ( waveOffset < 256 ) { // has wave not ended yet?
-          // higher pow => longer tails:
-          uint16_t s = map(pow(quadwave8(waveOffset), 3), 0, pow(255, 3), waterSat, waveSat); // blend saturation between standing water and wave peak
-          uint16_t b = map(pow(quadwave8(waveOffset), 3), 0, pow(255, 3), waterBright, waveBright); // blend brightness between standing water and wave peak
+          static uint8_t power = 3;  // higher pow => longer tails:
+          uint16_t param = pow(quadwave8(waveOffset), power);
+          uint16_t noise = map(
+            inoise8(map(i, 0, NUM_LEDS_TUBE, 0, 255), millis() / 20) // space out x coords
+            , 0, 255, 0, maxNoise*2    // increase or decrease by at most maxNoise
+          );
+          uint16_t s = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterSat, waveSat); // blend saturation between standing water and wave peak
+          s += noise - maxNoise;
+          if ( s > 255 ) s = 255;
+          uint16_t b = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterBright, waveBright); // blend brightness between standing water and wave peak
+          b += noise - maxNoise;
+          if ( b > 255 ) b = 255;
           ledsTube[i] = CHSV(waterHue, s, b);
           break;
         }
+        
       }
       ledsTube[i] = CHSV(waterHue, waterSat, waterBright);
       break;
