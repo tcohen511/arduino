@@ -66,10 +66,9 @@ uint8_t currentPaletteNo = 1;
 // ————————————————————————————————————————————————
 void (*renderers[])(void) {
 //  modePaletteSimple,
-//  modeWave,
+  modeWave
 //  modeTest,
 //  modeBrightness,
-  modeWave2
 };
 #define N_MODES (sizeof(renderers) / sizeof(renderers[0]));
 uint8_t renderMode = 0;
@@ -178,75 +177,51 @@ void modeBrightness() {
 }
 
 void modeTest() {
-
-  CHSV defaultColor = CHSV(45*255, 34*255, 76*255);
   
-  for ( uint8_t i=0; i<NUM_LEDS_TUBE; i++ ) {
-    ledsTube[i] = CRGB::Yellow;
-  }  
-  for ( uint8_t k=0; k<NUM_LEDS_TRIDENT; k++ ) {
-    ledsTrident[k] = CRGB::Yellow;
-  }  
+  static uint8_t j = 0;
+
+  j = ( millis()/10 ) % 255;
+//  ledsTube[8] = CHSV(215, 255, sin8(j));
+  ledsTube[8] = CHSV(215, 255, cubicwave8(j));
+  ledsTube[10] = CHSV(215, 255, quadwave8(j));
 }
 
-void modeWave2() {
-
-  static uint8_t offset = 0;
-  offset = addmod8( offset, 10, 255);
-  
-  for ( uint8_t k=0; k<NUM_LEDS_TUBE; k++ ) {
-    uint8_t idx = addmod8( map(k, 0, NUM_LEDS_TUBE, 0, 255), offset, 255 );
-//    uint8_t idx = beatsin8(bpm, 0, 255, 0, map(k, 0, NUM_LEDS_TUBE, 0, 255));
-    ledsTube[k] = ColorFromPalette( currentPalette, idx );
-  }
-
-//  uint8_t k = 12;
-//  uint8_t idx = beatsin8(bpm, 0, 255, 0, map(k, 0, NUM_LEDS_TUBE, 0, 255));
-//  ledsTube[k] = ColorFromPalette( currentPalette, idx );  
-}
 
 void modeWave() {
   
-  const uint8_t hue = 215; // ocean blue
-  const CHSV defaultColor = CHSV(122, 255, 30);
-  const uint8_t waveSpread = 5; // num leds in either direction from peak of wave
-  // round( (waveSpread/NUM_LEDS_TUBE)*256 - 1 )
-  const uint16_t timeBetweenWavesMs = 2000;
-  const uint16_t framesPerSecond = 50;
-  static uint8_t maxValue = 255; // highest intensity of leds in wave (at peak)
-  static uint8_t minValue = 1; // lowest intensity of leds in wave
+  const uint8_t waterHue = 190;
+  const uint8_t waterSat = 255;
+  const uint8_t waterBright = 30;
+  
+  const uint8_t waveHue = 190;
+  const uint8_t waveSat = 200;
+  const uint8_t waveBright = 255;
+  
+  const uint16_t offsetMs = 40;
+  static unsigned long lastWaveStart = 0;
+  
 
-  static uint8_t wavePeakStartIndex = waveSpread;
-  static CHSV colors[NUM_LEDS_TUBE + waveSpread*2]; // array of wave intensity values at each LED; extra indices for offscreen values (parts of wave that haven't reached first LED)
-  static uint8_t colorCount = sizeof(colors) / sizeof( CHSV ); // store size of value array
-  static uint8_t valueDelta = round(maxValue-minValue) / waveSpread; // change in intensity from one LED to next
-  
-  EVERY_N_MILLISECONDS(1000 / framesPerSecond) {
-    // wave moves forward
-    for ( uint8_t i = colorCount - 1; i>0; i-- ) {
-      colors[i] = colors[i-1];
-    }
-    colors[0] = defaultColor;
-  
-    // new wave
-    EVERY_N_MILLISECONDS(timeBetweenWavesMs) {
-      uint8_t v = maxValue;
-      // peak
-      colors[wavePeakStartIndex] = CHSV(hue, v, v);
-      // spread in both directions
-      for ( uint8_t j=1; j<= waveSpread; j++) {
-        v -= valueDelta;
-        colors[wavePeakStartIndex + j] = CHSV(hue, v, v);
-        colors[wavePeakStartIndex - j] = CHSV(hue, v, v);
+  // start new wave
+  EVERY_N_MILLISECONDS(3000) {
+    lastWaveStart = millis();
+  }
+
+  for ( unsigned long i=0; i<NUM_LEDS_TUBE; i++ ) {
+    unsigned long waveStart = lastWaveStart + offsetMs*i;
+    while (true) {
+      if ( millis() > waveStart) { // has wave started yet?
+        unsigned long waveOffset = ( millis() - waveStart ) / 6;
+        if ( waveOffset < 256 ) { // has wave not ended yet?
+          uint16_t s = map(pow(quadwave8(waveOffset), 3), 0, pow(255, 3), waterSat, waveSat); // blend saturation between standing water and wave peak
+          uint16_t b = map(pow(quadwave8(waveOffset), 3), 0, pow(255, 3), waterBright, waveBright); // blend brightness between standing water and wave peak
+          ledsTube[i] = CHSV(waterHue, s, b);
+          break;
+        }
       }
-    }
-  
-    // fill LEDs from wave colors
-    for ( uint8_t k=0; k<NUM_LEDS_TUBE; k++ ) {
-      ledsTube[k] = colors[k + waveSpread*2]; 
+      ledsTube[i] = CHSV(waterHue, waterSat, waterBright);
+      break;
     }
   }
-      
 }
 
 
