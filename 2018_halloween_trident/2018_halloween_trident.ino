@@ -198,20 +198,26 @@ void modeWave() {
   const uint8_t waveBright = 255;
   
   const uint16_t offsetMs = 40;
-  static unsigned long lastWaveStart = 0;
+  const uint16_t waveDelayMinMs = 2000;
+  const uint16_t waveDelayMaxMs = 5000;
   
-
+  static unsigned long lastWaveStart = 0;
+  static uint16_t nextWaveDelay = waveDelayMinMs;
+  
   // start new wave
-  EVERY_N_MILLISECONDS(3000) {
+  if ( millis() - lastWaveStart > nextWaveDelay ) {
     lastWaveStart = millis();
+    nextWaveDelay = random16(waveDelayMinMs, waveDelayMaxMs);    
   }
 
+  // animate
   for ( unsigned long i=0; i<NUM_LEDS_TUBE; i++ ) {
     unsigned long waveStart = lastWaveStart + offsetMs*i;
     while (true) {
       if ( millis() > waveStart) { // has wave started yet?
         unsigned long waveOffset = ( millis() - waveStart ) / 6;
         if ( waveOffset < 256 ) { // has wave not ended yet?
+          // higher pow => longer tails:
           uint16_t s = map(pow(quadwave8(waveOffset), 3), 0, pow(255, 3), waterSat, waveSat); // blend saturation between standing water and wave peak
           uint16_t b = map(pow(quadwave8(waveOffset), 3), 0, pow(255, 3), waterBright, waveBright); // blend brightness between standing water and wave peak
           ledsTube[i] = CHSV(waterHue, s, b);
