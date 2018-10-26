@@ -104,6 +104,11 @@ void setup() {
 // LOOP
 // ————————————————————————————————————————————————
 void loop() {
+
+//  EVERY_N_MILLISECONDS(2000) {
+//    Serial.println( (byte) 270 );
+//  }
+//  return;
   
   EVERY_N_MILLISECONDS(10) {
     // read potentiometer value and update brightness
@@ -201,7 +206,9 @@ void modeWave() {
   const uint16_t waveDelayMinMs = 2000;
   const uint16_t waveDelayMaxMs = 5000;
 
-  const uint16_t maxNoise = 10;
+  const uint8_t maxNoise = 30;
+  static uint16_t noiseDist = random(12345); // random number for noise generator
+  uint16_t noiseScale = 50; // higher number = choppier noise
   
   static unsigned long lastWaveStart = 0;
   static uint16_t nextWaveDelay = waveDelayMinMs;
@@ -213,7 +220,8 @@ void modeWave() {
   }
 
   // animate
-  for ( unsigned long i=0; i<NUM_LEDS_TUBE; i++ ) {
+//  for ( unsigned long i=0; i<NUM_LEDS_TUBE; i++ ) {
+  for ( unsigned long i=10; i<11; i++ ) {
     unsigned long waveStart = lastWaveStart + offsetMs*i;
     while (true) {
       if ( millis() > waveStart) { // has wave started yet?
@@ -222,16 +230,19 @@ void modeWave() {
         if ( waveOffset < 256 ) { // has wave not ended yet?
           static uint8_t power = 3;  // higher pow => longer tails:
           uint16_t param = pow(quadwave8(waveOffset), power);
-          uint16_t noise = map(
-            inoise8(map(i, 0, NUM_LEDS_TUBE, 0, 255) + millis()/20) // space out x coords
-            , 0, 255, 0, maxNoise*2    // increase or decrease by at most maxNoise
-          );
-          uint16_t s = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterSat, waveSat); // blend saturation between standing water and wave peak
-          s += noise - maxNoise;
-          if ( s > 255 ) s = 255;
-          uint16_t b = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterBright, waveBright); // blend brightness between standing water and wave peak
-          b += noise - maxNoise;
-          if ( b > 255 ) b = 255;
+          int8_t noise = scale8( maxNoise*2, inoise8(i*noiseScale, noiseDist + i*noiseScale) ) - maxNoise; // noise in [-maxNoise, maxNoise]
+          
+          uint8_t s = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterSat, waveSat); // blend saturation between standing water and wave peak
+          s = ( noise > 0 ) ? qadd8(s, noise) : max(s + noise, waterSat); // add or subtract noise, in [waterSat, 255]
+          
+          uint8_t b = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterBright, waveBright); // blend brightness between standing water and wave peak
+          Serial.print(b);
+          Serial.print("; ");
+          Serial.print(noise);
+          Serial.print("; ");
+          b = ( noise > 0 ) ? qadd8(b, noise) : max(b + noise, waterBright); // add or subtract noise, in [waterBright, 255]
+          Serial.println(b);
+          
           ledsTube[i] = CHSV(waterHue, s, b);
           break;
         }
@@ -241,6 +252,7 @@ void modeWave() {
       break;
     }
   }
+  noiseDist += beatsin8(10,1,4);
 }
 
 
