@@ -196,19 +196,21 @@ void modeWave() {
   
   const uint8_t waterHue = 190;
   const uint8_t waterSat = 255;
-  const uint8_t waterBright = 30;
+  const uint8_t waterBright = 40;
   
   const uint8_t waveHue = 190;
-  const uint8_t waveSat = 200;
+  const uint8_t waveSat = 150;
   const uint8_t waveBright = 255;
   
-  const uint16_t offsetMs = 40;
-  const uint16_t waveDelayMinMs = 2000;
-  const uint16_t waveDelayMaxMs = 5000;
+  const uint16_t offsetMs = 100; // higher value for slower wave
+  const uint8_t waveWidthParam = 15; // higher value for wider waves
+  const uint16_t waveDelayMinMs = 6000;
+  const uint16_t waveDelayMaxMs = 7000;
 
-  const uint8_t maxNoise = 30;
-  static uint16_t noiseDist = random(12345); // random number for noise generator
-  uint16_t noiseScale = 50; // higher number = choppier noise
+  const uint8_t maxNoisePct = 5; // maximum noise
+  const uint8_t noiseSpeedParam = 10; // lower value = faster (more variation at given wave point over time)
+  static uint16_t noiseScale = 20; // higher number = choppier (more variation between parts of wave at given moment)
+  static uint16_t noiseDist; // random number for noise generator
   
   static unsigned long lastWaveStart = 0;
   static uint16_t nextWaveDelay = waveDelayMinMs;
@@ -216,33 +218,34 @@ void modeWave() {
   // start new wave
   if ( millis() - lastWaveStart > nextWaveDelay ) {
     lastWaveStart = millis();
-    nextWaveDelay = random16(waveDelayMinMs, waveDelayMaxMs);    
+    nextWaveDelay = random16(waveDelayMinMs, waveDelayMaxMs);
+    noiseDist = random(12345);
   }
 
   // animate
-//  for ( unsigned long i=0; i<NUM_LEDS_TUBE; i++ ) {
-  for ( unsigned long i=10; i<11; i++ ) {
+  for ( unsigned long i=0; i<NUM_LEDS_TUBE; i++ ) {
     unsigned long waveStart = lastWaveStart + offsetMs*i;
     while (true) {
       if ( millis() > waveStart) { // has wave started yet?
-        unsigned long waveOffset = ( millis() - waveStart ) / 6;
+        unsigned long waveOffset = ( millis() - waveStart ) / waveWidthParam; // higher value for wider wave
         
         if ( waveOffset < 256 ) { // has wave not ended yet?
           static uint8_t power = 3;  // higher pow => longer tails:
           uint16_t param = pow(quadwave8(waveOffset), power);
-          int8_t noise = scale8( maxNoise*2, inoise8(i*noiseScale, noiseDist + i*noiseScale) ) - maxNoise; // noise in [-maxNoise, maxNoise]
-          
-          uint8_t s = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterSat, waveSat); // blend saturation between standing water and wave peak
-          s = ( noise > 0 ) ? qadd8(s, noise) : max(s + noise, waterSat); // add or subtract noise, in [waterSat, 255]
           
           uint8_t b = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterBright, waveBright); // blend brightness between standing water and wave peak
+          // position within wave is defined by brightness, so use that as x coord in noise function
+          int8_t noise = scale8( maxNoisePct*b*2/100, inoise8(b*noiseScale, b*noiseScale + noiseDist + millis()/noiseSpeedParam) ) - maxNoisePct*b/100; // noise in [-maxNoise, maxNoise]
           Serial.print(b);
           Serial.print("; ");
           Serial.print(noise);
           Serial.print("; ");
           b = ( noise > 0 ) ? qadd8(b, noise) : max(b + noise, waterBright); // add or subtract noise, in [waterBright, 255]
           Serial.println(b);
-          
+
+          // saturation
+          uint8_t s = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterSat, waveSat); // blend saturation between standing water and wave peak
+          s = ( noise > 0 ) ? qadd8(s, noise) : max(s + noise, waterSat); // add or subtract noise, in [waterSat, 255]
           ledsTube[i] = CHSV(waterHue, s, b);
           break;
         }
@@ -252,7 +255,6 @@ void modeWave() {
       break;
     }
   }
-  noiseDist += beatsin8(10,1,4);
 }
 
 
