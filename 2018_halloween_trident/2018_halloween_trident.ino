@@ -73,13 +73,13 @@ uint8_t currentPaletteNo = 1;
 // RENDER MODES
 // ————————————————————————————————————————————————
 void (*renderers[])(void) {
-//  modePaletteSimple,
+  modePaletteSimple,
   modeWave
 //  modeTest,
 //  modeBrightness,
 };
 #define N_MODES (sizeof(renderers) / sizeof(renderers[0]));
-uint8_t renderMode = 0;
+uint8_t renderMode = 1;
 
 
 
@@ -162,7 +162,7 @@ void updatePalette() {
 }
 
 void sendPayload() {
-  Payload _p = { brightness, remderMode, trigger, param1, param2, param3 };
+  Payload _p = { brightness, renderMode, trigger, param1, param2, param3 };
   radio.write(&_p, sizeof(_p));    
 }
 
@@ -226,6 +226,7 @@ void modeWave() {
   
   static unsigned long lastWaveStart = 0;
   static uint16_t nextWaveDelay = waveDelayMinMs;
+  static uint8_t lastLedBrightness = 0; // for sending water on to crown
   
   // start new wave
   if ( millis() - lastWaveStart > nextWaveDelay ) {
@@ -249,10 +250,14 @@ void modeWave() {
 
           // brightness
           uint8_t b = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterBright, waveBright); // blend brightness between standing water and wave peak
-          // if last led, set payload param1 to its brightness
+          // if last led, set payload param1 to its decrease in brightness
           if ( i == NUM_LEDS_TUBE - 1 ) {
-            param1 = b;
-          }          
+            if ( b < lastLedBrightness ) {
+              param1 = lastLedBrightness - b;
+            }
+            lastLedBrightness = b;
+            Serial.println(param1);
+          }       
           // position within wave is defined by brightness, so use that as x coord in noise function
           int8_t noise = scale8( maxNoisePct*b*2/100, inoise8(b*noiseScale, b*noiseScale + noiseDist + millis()/noiseSpeedParam) ) - maxNoisePct*b/100;
           b = ( noise > 0 ) ? qadd8(b, noise) : max(b + noise, waterBright); // add or subtract noise, in [waterBright, 255]
@@ -266,6 +271,7 @@ void modeWave() {
         
       }
       ledsTube[NUM_LEDS_TUBE-i-1] = CHSV(hue, waterSat, waterBright);
+      if ( i == NUM_LEDS_TUBE - 1 ) lastLedBrightness = 0; // reset
       break;
     }
   }

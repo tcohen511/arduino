@@ -58,10 +58,11 @@ uint8_t currentPaletteNo = 1;
 // RENDER MODES
 // ————————————————————————————————————————————————
 void (*renderers[])(void) {
-  modePaletteSimple
+  modePaletteSimple,
+  modeWave
 };
 #define N_MODES (sizeof(renderers) / sizeof(renderers[0]));
-uint8_t renderMode = 0;
+uint8_t renderMode = 1;
 
 
 
@@ -89,13 +90,12 @@ void setup() {
 // LOOP
 // ————————————————————————————————————————————————
 void loop() {
-
+  
   // receive transmission
   getPayload();
 
   // animate
   if ( brightness > 5 ) {
-    updatePalette();
     (*renderers[renderMode])();
   } else {
     FastLED.clear();
@@ -158,24 +158,80 @@ void updatePalette() {
 // ————————————————————————————————————————————————
 
 void modePaletteSimple() {
-  
+  updatePalette();
   fillFromPaletteSimple(ledsStrip, NUM_LEDS_STRIP, currentPalette);
 }
 
 void modeWave() {
 
-  // wave params
-  const uint16_t offsetMs = 75; // higher value for slower wave
+//  for ( uint8_t i=0; i< NUM_LEDS_STRIP; i++ ) {
+//    ledsStrip[i] = CHSV(190, 255, 255);
+//  }
+//  return;
   
-  static unsigned long lastWaveStart = 0;
-
-  // start new wave
-  if ( trigger ) {
-    lastWaveStart = millis();
+  const uint8_t hue = 190;
+  const uint8_t waterSpreadPct = 5; // amount of water that spreads from one LED to next each frame
+  const uint8_t waterSpreadMin = 100;
+  const uint8_t framesPerSecond = 60;
+  
+  const uint8_t midLed = NUM_LEDS_STRIP / 2;
+  static uint8_t waterVolume[midLed + 1]; // array to hold water volume amounts by LED; 0 idx is middle
+  static uint8_t waterVolumeSize = sizeof(waterVolume) / sizeof(waterVolume[0]);
+  
+  // add new water (brightness) to middle LED
+  if ( param1 > 0 ) {
+    waterVolume[0] = qadd8(waterVolume[0], param1);
+    ledsStrip[midLed] = CHSV(hue, 255, waterVolume[0]);
+    param1 = 0;
   }
+
+  EVERY_N_MILLISECONDS(1000 / framesPerSecond) {
   
+    // decrease saturation
   
+    // spread water
+    for ( int i = waterVolumeSize-1; i>=0; i-- ) {
+      // pass water along
+      uint8_t lost = waterSpreadPct * waterVolume[i] / 100;
+      if ( i == midLed) Serial.println(lost);
+      waterVolume[i] = qsub8(waterVolume[i], lost);
+      if ( i<waterVolumeSize-1 ) {
+        waterVolume[i+1] = qadd8(waterVolume[i+1], lost);
+      }
+    }
+    
    
+    // set LEDs
+    for ( uint8_t j=midLed+1; j<NUM_LEDS_STRIP-1; j++ ) {
+      ledsStrip[j] = CHSV(hue, 255, waterVolume[j - midLed]);
+    }
+    for ( int k=midLed-1; k >= 0; k-- ) {
+      ledsStrip[k] = CHSV(hue, 255, waterVolume[midLed - k]);
+    }
+    
+//    Serial.println(waterVolume[midLed]);
+  }
+
+//  19: 9
+//  18: 8
+//  17: 7
+//  16: 6
+//  15: 5
+//  14: 4
+//  13: 3
+//  12: 2
+//  11: 1
+//  10: 0
+//  9: 1
+//  8: 2
+//  7: 3
+//  6: 4
+//  5: 5
+//  4: 6
+//  3: 7
+//  2: 8
+//  1: 9
+//  0: 10
 }
 
 
