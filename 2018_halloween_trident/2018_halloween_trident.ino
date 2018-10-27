@@ -249,6 +249,10 @@ void modeWave() {
 
           // brightness
           uint8_t b = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterBright, waveBright); // blend brightness between standing water and wave peak
+          // if last led, set payload param1 to its brightness
+          if ( i == NUM_LEDS_TUBE - 1 ) {
+            param1 = b;
+          }          
           // position within wave is defined by brightness, so use that as x coord in noise function
           int8_t noise = scale8( maxNoisePct*b*2/100, inoise8(b*noiseScale, b*noiseScale + noiseDist + millis()/noiseSpeedParam) ) - maxNoisePct*b/100;
           b = ( noise > 0 ) ? qadd8(b, noise) : max(b + noise, waterBright); // add or subtract noise, in [waterBright, 255]

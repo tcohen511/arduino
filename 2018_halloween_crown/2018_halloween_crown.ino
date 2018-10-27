@@ -91,23 +91,7 @@ void setup() {
 void loop() {
 
   // receive transmission
-  if (radio.available()) {
-    Payload _p = {};
-    radio.read(&_p, sizeof(_p));
-
-    // set LED brightness
-    if ( _p.brightness != brightness ) {
-      brightness = _p.brightness;
-      setBrightness(brightness);
-    }
-
-    // set animation mode
-    renderMode = _p.mode;
-    
-    // new trigger?
-    trigger = _p.trigger;
-    
-  }
+  getPayload();
 
   // animate
   if ( brightness > 5 ) {
@@ -129,6 +113,33 @@ void setBrightness(int brightness) {
 void show() {
   FastLED.show();
   jewel.show();
+}
+
+void getPayload() {
+
+  if ( !radio.available() ) {
+    return;
+  }
+  
+  Payload _p = {};
+  radio.read(&_p, sizeof(_p));
+
+  // set LED brightness
+  if ( _p.brightness != brightness ) {
+    brightness = _p.brightness;
+    setBrightness(brightness);
+  }
+
+  // set animation mode
+  renderMode = _p.mode;
+  
+  // new trigger?
+  trigger = _p.trigger;
+
+  // params
+  param1 = _p.param1;
+  param2 = _p.param2;
+  param3 = _p.param3;
 }
 
 void updatePalette() {
@@ -163,7 +174,7 @@ void modeWave() {
     lastWaveStart = millis();
   }
   
-
+  
    
 }
 
