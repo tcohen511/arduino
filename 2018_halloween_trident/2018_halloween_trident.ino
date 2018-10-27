@@ -33,10 +33,14 @@ uint8_t orientation;
 RF24 radio(CE_PIN, CSN_PIN);
 const byte address[6] = "00001";
 
-// define struct to send pot reading and whether new button click
+// define struct for sending payload
 typedef struct {
-  int brightness;
-  bool buttonPress;
+  uint8_t brightness;
+  bool mode;
+  bool trigger;
+  uint8_t param1;
+  uint8_t param2;
+  uint8_t param3;
 } Payload;
 
 
@@ -52,7 +56,11 @@ CRGB ledsTrident[NUM_LEDS_TRIDENT];
 CRGB ledsTube[NUM_LEDS_TUBE];
 
 #define BRIGHTNESS_STEP 2
-int brightness = 0;
+uint8_t brightness = 0;
+bool trigger = false; // for coordinated animations between components
+uint8_t param1; // params for animations
+uint8_t param2;
+uint8_t param3;
 
 extern const TProgmemRGBGradientPalettePtr gradientPalettes[];
 extern const uint8_t gradientPaletteCount;
@@ -154,7 +162,7 @@ void updatePalette() {
 }
 
 void sendPayload() {
-  Payload _p = { brightness, buttonPress };
+  Payload _p = { brightness, remderMode, trigger, param1, param2, param3 };
   radio.write(&_p, sizeof(_p));    
 }
 
@@ -194,27 +202,26 @@ void modeTest() {
 
 void modeWave() {
   
+  // colors
   const uint8_t hue1 = 150;
   const uint8_t hue2 = 190;
-  
-//  const uint8_t waterHue = 190;
   const uint8_t waterSat = 255;
   const uint8_t waterBright = 40;
-  
-//  const uint8_t waveHue = 190;
   const uint8_t waveSat = 150;
   const uint8_t waveBright = 255;
   
-  const uint16_t offsetMs = 75; // higher value for slower wave
+  // wave params
+  const uint8_t offsetMs = 75; // higher value for slower wave
   const uint8_t waveWidthParamMin = 8; // higher value for wider waves
   const uint8_t waveWidthParamMax = 13;
   static uint8_t waveWidthParam;
   const uint16_t waveDelayMinMs = 5000;
   const uint16_t waveDelayMaxMs = 7000;
 
+  // noise params
   const uint8_t maxNoisePct = 2; // maximum noise
   const uint8_t noiseSpeedParam = 150; // lower value = faster (more variation at given wave point over time)
-  static uint16_t noiseScale = 10; // higher number = choppier (more variation between parts of wave at given moment)
+  static uint8_t noiseScale = 10; // higher number = choppier (more variation between parts of wave at given moment)
   static uint16_t noiseDist; // random number for noise generator
   
   static unsigned long lastWaveStart = 0;
@@ -239,16 +246,12 @@ void modeWave() {
         if ( waveOffset < 256 ) { // has wave not ended yet?
           static uint8_t power = 3;  // higher pow => longer tails:
           uint16_t param = pow(quadwave8(waveOffset), power);
-          
+
+          // brightness
           uint8_t b = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterBright, waveBright); // blend brightness between standing water and wave peak
           // position within wave is defined by brightness, so use that as x coord in noise function
-          int8_t noise = scale8( maxNoisePct*b*2/100, inoise8(b*noiseScale, b*noiseScale + noiseDist + millis()/noiseSpeedParam) ) - maxNoisePct*b/100; // noise in [-maxNoise, maxNoise]
-          Serial.print(b);
-          Serial.print("; ");
-          Serial.print(noise);
-          Serial.print("; ");
+          int8_t noise = scale8( maxNoisePct*b*2/100, inoise8(b*noiseScale, b*noiseScale + noiseDist + millis()/noiseSpeedParam) ) - maxNoisePct*b/100;
           b = ( noise > 0 ) ? qadd8(b, noise) : max(b + noise, waterBright); // add or subtract noise, in [waterBright, 255]
-          Serial.println(b);
 
           // saturation
           uint8_t s = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterSat, waveSat); // blend saturation between standing water and wave peak

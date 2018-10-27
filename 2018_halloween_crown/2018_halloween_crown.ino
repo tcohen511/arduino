@@ -20,10 +20,13 @@
 RF24 radio(CE_PIN, CSN_PIN);
 const byte address[6] = "00001";
 
-// define struct to send pot reading and whether new button click
 typedef struct {
-  int brightness;
-  bool buttonPress;
+  uint8_t brightness;
+  bool mode;
+  bool trigger;
+  uint8_t param1;
+  uint8_t param2;
+  uint8_t param3;
 } Payload;
 
 
@@ -38,7 +41,11 @@ typedef struct {
 CRGB ledsStrip[NUM_LEDS_STRIP];
 Adafruit_NeoPixel jewel;
 
-int brightness = 100;
+uint8_t brightness = 100;
+bool trigger = false; // for coordinated animations between components
+uint8_t param1; // params for animations
+uint8_t param2;
+uint8_t param3;
 
 extern const TProgmemRGBGradientPalettePtr gradientPalettes[];
 extern const uint8_t gradientPaletteCount;
@@ -88,13 +95,18 @@ void loop() {
     Payload _p = {};
     radio.read(&_p, sizeof(_p));
 
-    Serial.println(_p.brightness);
-
     // set LED brightness
     if ( _p.brightness != brightness ) {
       brightness = _p.brightness;
       setBrightness(brightness);
     }
+
+    // set animation mode
+    renderMode = _p.mode;
+    
+    // new trigger?
+    trigger = _p.trigger;
+    
   }
 
   // animate
@@ -104,7 +116,7 @@ void loop() {
   } else {
     FastLED.clear();
   }
-  FastLED.show();  
+  FastLED.show();
 }
 
 // METHODS
@@ -133,9 +145,26 @@ void updatePalette() {
 
 // ANIMATION MODES
 // ————————————————————————————————————————————————
+
 void modePaletteSimple() {
   
   fillFromPaletteSimple(ledsStrip, NUM_LEDS_STRIP, currentPalette);
+}
+
+void modeWave() {
+
+  // wave params
+  const uint16_t offsetMs = 75; // higher value for slower wave
+  
+  static unsigned long lastWaveStart = 0;
+
+  // start new wave
+  if ( trigger ) {
+    lastWaveStart = millis();
+  }
+  
+
+   
 }
 
 
