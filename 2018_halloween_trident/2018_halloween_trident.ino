@@ -78,7 +78,7 @@ void (*renderers[])(void) {
 //  modeTest,
 //  modeBrightness,
 };
-#define N_MODES (sizeof(renderers) / sizeof(renderers[0]));
+#define N_MODES (sizeof(renderers) / sizeof(renderers[0]))
 uint8_t renderMode = 1;
 
 
@@ -112,11 +112,6 @@ void setup() {
 // LOOP
 // ————————————————————————————————————————————————
 void loop() {
-
-//  EVERY_N_MILLISECONDS(2000) {
-//    Serial.println( (byte) 270 );
-//  }
-//  return;
   
   EVERY_N_MILLISECONDS(10) {
     // read potentiometer value and update brightness
@@ -133,7 +128,10 @@ void loop() {
   orientation = accel.getOrientation();
 
   // check for button press
-  buttonPress = button.pressed();
+  if ( button.pressed() ) {
+    renderMode++;
+    renderMode = mod8(renderMode, N_MODES);
+  }
 
   sendPayload();
 
@@ -226,18 +224,23 @@ void modeWave() {
   
   static unsigned long lastWaveStart = 0;
   static uint16_t nextWaveDelay = waveDelayMinMs;
-  static uint8_t lastLedBrightness = 0; // for sending water on to crown
+  static uint8_t lastLedCurrentBrightness = 0; // for sending water on to crown
+  static uint8_t lastLedLastBrightness = 0; // for sending water on to crown
+  static bool triggered = false;
   
   // start new wave
   if ( millis() - lastWaveStart > nextWaveDelay ) {
     lastWaveStart = millis();
+    triggered = false;
     nextWaveDelay = random16(waveDelayMinMs, waveDelayMaxMs);
     waveWidthParam = random8(waveWidthParamMin, waveWidthParamMax); // vary wave width
     noiseDist = random(12345);
   }
 
   // animate
-  for ( unsigned long i=0; i<NUM_LEDS_TUBE; i++ ) {
+  lastLedLastBrightness = lastLedCurrentBrightness;
+  param1 = 0;
+  for ( int i=0; i<NUM_LEDS_TUBE; i++ ) {
     unsigned long waveStart = lastWaveStart + offsetMs*i;
     uint8_t hue = beatsin8(5, hue1, hue2, 0, inoise8(i*noiseScale)); // vary the hue, with period offset for each pixel set by noise function
     while (true) {
@@ -252,11 +255,7 @@ void modeWave() {
           uint8_t b = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterBright, waveBright); // blend brightness between standing water and wave peak
           // if last led, set payload param1 to its decrease in brightness
           if ( i == NUM_LEDS_TUBE - 1 ) {
-            if ( b < lastLedBrightness ) {
-              param1 = lastLedBrightness - b;
-            }
-            lastLedBrightness = b;
-            Serial.println(param1);
+            lastLedCurrentBrightness = b;
           }       
           // position within wave is defined by brightness, so use that as x coord in noise function
           int8_t noise = scale8( maxNoisePct*b*2/100, inoise8(b*noiseScale, b*noiseScale + noiseDist + millis()/noiseSpeedParam) ) - maxNoisePct*b/100;
@@ -271,9 +270,14 @@ void modeWave() {
         
       }
       ledsTube[NUM_LEDS_TUBE-i-1] = CHSV(hue, waterSat, waterBright);
-      if ( i == NUM_LEDS_TUBE - 1 ) lastLedBrightness = 0; // reset
       break;
     }
+  }
+  // set payload param1 to decrease in brightness of last LED
+  if ( lastLedCurrentBrightness > lastLedLastBrightness && triggered == false ) {
+    trigger = true;
+  } else {
+    trigger = false;
   }
 }
 

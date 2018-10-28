@@ -62,7 +62,7 @@ void (*renderers[])(void) {
   modeWave
 };
 #define N_MODES (sizeof(renderers) / sizeof(renderers[0]));
-uint8_t renderMode = 1;
+uint8_t renderMode = 0;
 
 
 
@@ -98,9 +98,9 @@ void loop() {
   if ( brightness > 5 ) {
     (*renderers[renderMode])();
   } else {
-    FastLED.clear();
+    clear();
   }
-  FastLED.show();
+  show();
 }
 
 // METHODS
@@ -112,6 +112,14 @@ void setBrightness(int brightness) {
 
 void show() {
   FastLED.show();
+  jewel.show();
+}
+
+void clear() {
+  FastLED.clear();
+  for ( uint8_t i=0; i<NUM_LEDS_JEWEL; i++ ) {
+    jewel.setPixelColor(i, 0, 0, 0);
+  }
   jewel.show();
 }
 
@@ -160,57 +168,91 @@ void updatePalette() {
 void modePaletteSimple() {
   updatePalette();
   fillFromPaletteSimple(ledsStrip, NUM_LEDS_STRIP, currentPalette);
+
+  for ( uint8_t i=0; i<NUM_LEDS_JEWEL; i++ ) {
+    jewel.setPixelColor(i, ledsStrip[0].red, ledsStrip[0].green, ledsStrip[0].blue);
+  }
+
+//  CRGB rgb = ledStrip[0];
+//  jewel.Color(ledsStrip[0].red, ledsStrip[0].green, ledsStrip[0].blue);
+//  Serial.print(ledsStrip[0].red);
+//  Serial.print("; ");
+//  Serial.print(ledsStrip[0].green);
+//  Serial.print("; ");
+//  Serial.println(ledsStrip[0].blue);
+  
 }
 
 void modeWave() {
 
-//  for ( uint8_t i=0; i< NUM_LEDS_STRIP; i++ ) {
-//    ledsStrip[i] = CHSV(190, 255, 255);
-//  }
-//  return;
+  // colors
+  const uint8_t hue1 = 150;
+  const uint8_t hue2 = 190;
+  const uint8_t waterSat = 255;
+  const uint8_t waterBright = 40;
+  const uint8_t waveSat = 150;
+  const uint8_t waveBright = 255;
   
-  const uint8_t hue = 190;
-  const uint8_t waterSpreadPct = 5; // amount of water that spreads from one LED to next each frame
-  const uint8_t waterSpreadMin = 100;
-  const uint8_t framesPerSecond = 60;
+  // wave params
+  const uint8_t offsetMs = 75; // higher value for slower wave
+  const uint8_t waveWidthParamMin = 8; // higher value for wider waves
+  const uint8_t waveWidthParamMax = 13;
+  static uint8_t waveWidthParam;
+
+  // noise params
+  const uint8_t maxNoisePct = 2; // maximum noise
+  const uint8_t noiseSpeedParam = 150; // lower value = faster (more variation at given wave point over time)
+  static uint8_t noiseScale = 10; // higher number = choppier (more variation between parts of wave at given moment)
+  static uint16_t noiseDist; // random number for noise generator
   
   const uint8_t midLed = NUM_LEDS_STRIP / 2;
-  static uint8_t waterVolume[midLed + 1]; // array to hold water volume amounts by LED; 0 idx is middle
-  static uint8_t waterVolumeSize = sizeof(waterVolume) / sizeof(waterVolume[0]);
-  
-  // add new water (brightness) to middle LED
-  if ( param1 > 0 ) {
-    waterVolume[0] = qadd8(waterVolume[0], param1);
-    ledsStrip[midLed] = CHSV(hue, 255, waterVolume[0]);
-    param1 = 0;
+  static CHSV nextCHSV;
+  static unsigned long lastWaveStart = 0;
+
+  // start new wave
+  if ( trigger == true ) {
+    lastWaveStart = millis();
+    waveWidthParam = random8(waveWidthParamMin, waveWidthParamMax); // vary wave width
+    noiseDist = random(12345);
   }
 
-  EVERY_N_MILLISECONDS(1000 / framesPerSecond) {
-  
-    // decrease saturation
-  
-    // spread water
-    for ( int i = waterVolumeSize-1; i>=0; i-- ) {
-      // pass water along
-      uint8_t lost = waterSpreadPct * waterVolume[i] / 100;
-      if ( i == midLed) Serial.println(lost);
-      waterVolume[i] = qsub8(waterVolume[i], lost);
-      if ( i<waterVolumeSize-1 ) {
-        waterVolume[i+1] = qadd8(waterVolume[i+1], lost);
+  // animate
+  for ( int i=0; i<midLed+1; i++ ) {
+    unsigned long waveStart = lastWaveStart + offsetMs*i;
+    uint8_t hue = beatsin8(5, hue1, hue2, 0, inoise8(i*noiseScale)); // vary the hue, with period offset for each pixel set by noise function
+    while (true) {
+      if ( millis() > waveStart) { // has wave started yet?
+        unsigned long waveOffset = ( millis() - waveStart ) / waveWidthParam; // higher value for wider wave
+        
+        if ( waveOffset < 256 ) { // has wave not ended yet?
+          static uint8_t power = 2;  // higher pow => longer tails:
+          uint16_t param = pow(quadwave8(waveOffset), power);
+
+          // brightness
+          uint8_t b = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterBright, waveBright); // blend brightness between standing water and wave peak
+          // position within wave is defined by brightness, so use that as x coord in noise function
+          int8_t noise = scale8( maxNoisePct*b*2/100, inoise8(b*noiseScale, b*noiseScale + noiseDist + millis()/noiseSpeedParam) ) - maxNoisePct*b/100;
+          b = ( noise > 0 ) ? qadd8(b, noise) : max(b + noise, waterBright); // add or subtract noise, in [waterBright, 255]
+
+          // saturation
+          uint8_t s = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterSat, waveSat); // blend saturation between standing water and wave peak
+          s = ( noise > 0 ) ? qadd8(s, noise) : max(s + noise, waterSat); // add or subtract noise, in [waterSat, 255]
+          nextCHSV = CHSV(hue, s, b);
+          break;
+        }
+        
       }
+      nextCHSV = CHSV(hue, waterSat, waterBright);
+      break;
     }
-    
-   
-    // set LEDs
-    for ( uint8_t j=midLed+1; j<NUM_LEDS_STRIP-1; j++ ) {
-      ledsStrip[j] = CHSV(hue, 255, waterVolume[j - midLed]);
+    // set LEDs in both directions
+    if ( midLed - i >= 0 ) {
+      ledsStrip[midLed-i] = nextCHSV;
     }
-    for ( int k=midLed-1; k >= 0; k-- ) {
-      ledsStrip[k] = CHSV(hue, 255, waterVolume[midLed - k]);
-    }
-    
-//    Serial.println(waterVolume[midLed]);
-  }
+    if ( midLed + i < NUM_LEDS_STRIP ) {
+      ledsStrip[midLed+i] = nextCHSV;
+    }        
+  }    
 
 //  19: 9
 //  18: 8
