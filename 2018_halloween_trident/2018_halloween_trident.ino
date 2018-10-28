@@ -279,6 +279,23 @@ void modeWave() {
   } else {
     trigger = false;
   }
+
+
+  // trident
+  static uint8_t tridentHue1 = 200;
+//  static uint8_t tridentHue2 = 230;
+  static CRGBPalette16 tridentPalette(pink_purp);
+//  uint8_t tridentHue = beatsin8(10, tridentHue1, tridentHue2);
+  uint8_t tridentHue = tridentHue1;
+  for ( uint8_t i=0; i<NUM_LEDS_TRIDENT; i++ ) {
+    
+//    ledsTrident[i] = CHSV(tridentHue, 200, beatsin8(10, 10, 100, 0, i*10));
+//    ledsTrident[NUM_LEDS_TRIDENT-i-1] = ColorFromPalette(tridentPalette, beatsin8(10, 10, 100, 0, i*50), 255, LINEARBLEND);
+  }
+
+  for ( uint8_t j=0; j<NUM_LEDS_TRIDENT; j++ ) {
+    ledsTrident[j] = CHSV(200, 200, beatsin8(15, 50, 100));
+  }  
 }
 
 
@@ -325,9 +342,9 @@ void fillFromPaletteSimple(CRGB* ledArray, uint16_t numLeds, CRGBPalette16& pale
 
 const TProgmemRGBGradientPalettePtr gradientPalettes[] = {
 //  green_to_blue,
-//  bhw1_14_gp,
-//  bhw1_greeny_gp,
-  wave
+  bhw1_14_gp,
+  bhw1_greeny_gp
+//  pink_purp
 };
 const uint8_t gradientPaletteCount = 
   sizeof( gradientPalettes) / sizeof( TProgmemRGBGradientPalettePtr );

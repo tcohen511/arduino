@@ -30,7 +30,16 @@ DEFINE_GRADIENT_PALETTE( bhw1_greeny_gp ) {
   255,   0,  0,  0};  
 
 
-  DEFINE_GRADIENT_PALETTE( wave ) {
-	 0,     2, 25, 255,
-   100,   2, 25, 255,
-   255,   42,255, 45};
+DEFINE_GRADIENT_PALETTE( wave ) {
+ 0,     2, 25, 255,
+ 100,   2, 25, 255,
+ 255,   42,255, 45};
+
+DEFINE_GRADIENT_PALETTE( pink_purp ) {
+ 0,     104, 49, 255,
+ 255,   248, 31, 255}; 
+
+
+ // DEFINE_GRADIENT_PALLETE( pink_purp ) {
+ // 0,  104, 49, 255,
+ // 255, 248, 31, 255};

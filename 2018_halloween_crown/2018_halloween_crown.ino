@@ -118,7 +118,7 @@ void show() {
 void clear() {
   FastLED.clear();
   for ( uint8_t i=0; i<NUM_LEDS_JEWEL; i++ ) {
-    jewel.setPixelColor(i, 0, 0, 0);
+    jewel.setPixelColor(i, jewel.Color(0, 0, 0, 0));
   }
   jewel.show();
 }
@@ -169,22 +169,22 @@ void modePaletteSimple() {
   updatePalette();
   fillFromPaletteSimple(ledsStrip, NUM_LEDS_STRIP, currentPalette);
 
+  // jewel animation
+  jewel.setBrightness( beatsin8(15, 10, brightness) );
   for ( uint8_t i=0; i<NUM_LEDS_JEWEL; i++ ) {
-    jewel.setPixelColor(i, ledsStrip[0].red, ledsStrip[0].green, ledsStrip[0].blue);
+    jewel.setPixelColor(i, jewel.Color(81, 0, 255, 0));
   }
-
-//  CRGB rgb = ledStrip[0];
-//  jewel.Color(ledsStrip[0].red, ledsStrip[0].green, ledsStrip[0].blue);
-//  Serial.print(ledsStrip[0].red);
-//  Serial.print("; ");
-//  Serial.print(ledsStrip[0].green);
-//  Serial.print("; ");
-//  Serial.println(ledsStrip[0].blue);
   
 }
 
 void modeWave() {
 
+  // jewel animation
+  jewel.setBrightness( beatsin8(15, 10, brightness*0.75) );
+  for ( uint8_t i=0; i<NUM_LEDS_JEWEL; i++ ) {
+    jewel.setPixelColor(i, jewel.Color(81, 0, 255, 0));
+  }
+  
   // colors
   const uint8_t hue1 = 150;
   const uint8_t hue2 = 190;
@@ -213,7 +213,7 @@ void modeWave() {
   if ( trigger == true ) {
     lastWaveStart = millis();
     waveWidthParam = random8(waveWidthParamMin, waveWidthParamMax); // vary wave width
-    noiseDist = random(12345);
+//    noiseDist = random(12345);
   }
 
   // animate
@@ -231,12 +231,12 @@ void modeWave() {
           // brightness
           uint8_t b = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterBright, waveBright); // blend brightness between standing water and wave peak
           // position within wave is defined by brightness, so use that as x coord in noise function
-          int8_t noise = scale8( maxNoisePct*b*2/100, inoise8(b*noiseScale, b*noiseScale + noiseDist + millis()/noiseSpeedParam) ) - maxNoisePct*b/100;
-          b = ( noise > 0 ) ? qadd8(b, noise) : max(b + noise, waterBright); // add or subtract noise, in [waterBright, 255]
+//          int8_t noise = scale8( maxNoisePct*b*2/100, inoise8(b*noiseScale, b*noiseScale + noiseDist + millis()/noiseSpeedParam) ) - maxNoisePct*b/100;
+//          b = ( noise > 0 ) ? qadd8(b, noise) : max(b + noise, waterBright); // add or subtract noise, in [waterBright, 255]
 
           // saturation
           uint8_t s = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterSat, waveSat); // blend saturation between standing water and wave peak
-          s = ( noise > 0 ) ? qadd8(s, noise) : max(s + noise, waterSat); // add or subtract noise, in [waterSat, 255]
+//          s = ( noise > 0 ) ? qadd8(s, noise) : max(s + noise, waterSat); // add or subtract noise, in [waterSat, 255]
           nextCHSV = CHSV(hue, s, b);
           break;
         }
