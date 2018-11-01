@@ -151,12 +151,12 @@ void getPayload() {
 }
 
 void updatePalette() {
-  EVERY_N_SECONDS( 5 ) {
+  EVERY_N_SECONDS( 10 ) {
     currentPaletteNo = addmod8( currentPaletteNo, 1, gradientPaletteCount);
     targetPalette = gradientPalettes[ currentPaletteNo ];
   }
 //  nblendPaletteTowardPalette( currentPalette, targetPalette, 16);
-  EVERY_N_MILLISECONDS(40) {
+  EVERY_N_MILLISECONDS(100) {
     nblendPaletteTowardPalette( currentPalette, targetPalette, 16);
   }  
 }
@@ -170,7 +170,7 @@ void modePaletteSimple() {
   fillFromPaletteSimple(ledsStrip, NUM_LEDS_STRIP, currentPalette);
 
   // jewel animation
-  jewel.setBrightness( beatsin8(15, 10, brightness) );
+  jewel.setBrightness( beatsin8(20, 10, brightness) );
   for ( uint8_t i=0; i<NUM_LEDS_JEWEL; i++ ) {
     jewel.setPixelColor(i, jewel.Color(81, 0, 255, 0));
   }
@@ -180,7 +180,7 @@ void modePaletteSimple() {
 void modeWave() {
 
   // jewel animation
-  jewel.setBrightness( beatsin8(15, 10, brightness*0.75) );
+  jewel.setBrightness( beatsin8(20, 10, brightness*0.75) );
   for ( uint8_t i=0; i<NUM_LEDS_JEWEL; i++ ) {
     jewel.setPixelColor(i, jewel.Color(81, 0, 255, 0));
   }

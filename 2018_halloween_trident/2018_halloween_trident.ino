@@ -148,12 +148,12 @@ void loop() {
 // METHODS
 // ————————————————————————————————————————————————
 void updatePalette() {
-  EVERY_N_SECONDS( 5 ) {
+  EVERY_N_SECONDS( 10 ) {
     currentPaletteNo = addmod8( currentPaletteNo, 1, gradientPaletteCount);
     targetPalette = gradientPalettes[ currentPaletteNo ];
   }
 //  nblendPaletteTowardPalette( currentPalette, targetPalette, 16);
-  EVERY_N_MILLISECONDS(40) {
+  EVERY_N_MILLISECONDS(100) {
     nblendPaletteTowardPalette( currentPalette, targetPalette, 16);
   }  
 }
