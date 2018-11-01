@@ -137,7 +137,6 @@ void loop() {
 
   // animate
   if ( brightness > BRIGHTNESS_STEP + 1 ) {
-//    updatePalette();
     (*renderers[renderMode])();
   } else {
     FastLED.clear();
@@ -168,7 +167,7 @@ void sendPayload() {
 // ANIMATION MODES
 // ————————————————————————————————————————————————
 void modePaletteSimple() {
-  
+  updatePalette();
   fillFromPaletteSimple(ledsTrident, NUM_LEDS_TRIDENT, currentPalette);
   fillFromPaletteSimple(ledsTube, NUM_LEDS_TUBE, currentPalette);
 }
