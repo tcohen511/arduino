@@ -152,7 +152,6 @@ void updatePalette() {
     currentPaletteNo = addmod8( currentPaletteNo, 1, gradientPaletteCount);
     targetPalette = gradientPalettes[ currentPaletteNo ];
   }
-//  nblendPaletteTowardPalette( currentPalette, targetPalette, 16);
   EVERY_N_MILLISECONDS(100) {
     nblendPaletteTowardPalette( currentPalette, targetPalette, 16);
   }  
@@ -222,6 +221,7 @@ void modeWave() {
   static uint16_t noiseDist; // random number for noise generator
   
   static unsigned long lastWaveStart = 0;
+  // set initial wave delay (time until first wave) to min delay time
   static uint16_t nextWaveDelay = waveDelayMinMs;
   static uint8_t lastLedCurrentBrightness = 0; // for sending water on to crown
   static uint8_t lastLedLastBrightness = 0; // for sending water on to crown
@@ -238,41 +238,44 @@ void modeWave() {
 
   // animate
   lastLedLastBrightness = lastLedCurrentBrightness;
-  param1 = 0;
+  // loop through LEDs
   for ( int i=0; i<NUM_LEDS_TUBE; i++ ) {
+    // lastWaveStart defines when wave reaches first LED; calculate when wave reaches given LED
     unsigned long waveStart = lastWaveStart + offsetMs*i;
     uint8_t hue = beatsin8(5, hue1, hue2, 0, inoise8(i*noiseScale)); // vary the hue, with period offset for each pixel set by noise function
     while (true) {
-      if ( millis() > waveStart) { // has wave started yet?
-        unsigned long waveOffset = ( millis() - waveStart ) / waveWidthParam; // higher value for wider wave
+      if ( millis() > waveStart) { // has wave reached given LED yet?
+        unsigned long waveOffset = ( millis() - waveStart ) / waveWidthParam; // where along wave are we? (x/256)
         
-        if ( waveOffset < 256 ) { // has wave not ended yet?
+        if ( waveOffset < 256 ) { // has wave not passed given LED yet?
           static uint8_t power = 3;  // higher pow => longer tails:
           uint16_t param = pow(quadwave8(waveOffset), power);
 
           // brightness
-          uint8_t b = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterBright, waveBright); // blend brightness between standing water and wave peak
-          // if last led, set payload param1 to its decrease in brightness
+          uint8_t b = map(param, 0, pow(255, power), waterBright, waveBright); // blend brightness between standing water and wave peak
+          // if last led, store current brightness to determine trigger
           if ( i == NUM_LEDS_TUBE - 1 ) {
             lastLedCurrentBrightness = b;
           }       
+          // add noise
           // position within wave is defined by brightness, so use that as x coord in noise function
           int8_t noise = scale8( maxNoisePct*b*2/100, inoise8(b*noiseScale, b*noiseScale + noiseDist + millis()/noiseSpeedParam) ) - maxNoisePct*b/100;
           b = ( noise > 0 ) ? qadd8(b, noise) : max(b + noise, waterBright); // add or subtract noise, in [waterBright, 255]
 
           // saturation
-          uint8_t s = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterSat, waveSat); // blend saturation between standing water and wave peak
+          uint8_t s = map(param, 0, pow(255, power), waterSat, waveSat); // blend saturation between standing water and wave peak
           s = ( noise > 0 ) ? qadd8(s, noise) : max(s + noise, waterSat); // add or subtract noise, in [waterSat, 255]
           ledsTube[NUM_LEDS_TUBE-i-1] = CHSV(hue, s, b);
           break;
         }
         
       }
+      // if no wave at LED: set to ambient water color
       ledsTube[NUM_LEDS_TUBE-i-1] = CHSV(hue, waterSat, waterBright);
       break;
     }
   }
-  // set payload param1 to decrease in brightness of last LED
+  // when wave has reached last LED, trigger wave start in crown
   if ( lastLedCurrentBrightness > lastLedLastBrightness && triggered == false ) {
     trigger = true;
   } else {
@@ -280,7 +283,7 @@ void modeWave() {
   }
 
 
-  // trident
+  // trident spikes
   static uint8_t tridentHue1 = 200;
 //  static uint8_t tridentHue2 = 230;
   static CRGBPalette16 tridentPalette(pink_purp);
