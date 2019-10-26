@@ -168,7 +168,7 @@ void modeZoom() {
   static bool zoomForward = false;
   static uint8_t zoomHue = 0;
   static int8_t zoomIndex = NUM_LEDS_STRIP - 1;
-  static uint8_t zooms = 3;
+  static uint8_t zooms = 0;
   static uint8_t zoomCount = 0;
 
 
@@ -176,7 +176,7 @@ void modeZoom() {
   if ( active == false && trigger == true ) {
     trigger = false;
     active = true;
-    zooms = map(random8(), 0, 255, 1, 2);
+    zooms = random(1,3);
     transmitting = true;
     radio.stopListening();
   }

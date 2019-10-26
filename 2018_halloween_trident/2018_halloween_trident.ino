@@ -204,7 +204,7 @@ void modeZoom() {
   if ( active == false && trigger == true ) {
     trigger = false;
     active = true;
-    zooms = map(random8(), 0, 255, 1, 2);
+    zooms = random(1,3);
     transmitting = true;
     radio.stopListening();
   }
