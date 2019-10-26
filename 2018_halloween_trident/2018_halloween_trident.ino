@@ -37,7 +37,7 @@ bool transmitting = true;
 // define struct for sending payload
 typedef struct {
   uint8_t brightness;
-  bool mode;
+  uint8_t mode;
   bool trigger;
   uint8_t param1;
   uint8_t param2;
@@ -74,11 +74,9 @@ uint8_t currentPaletteNo = 1;
 // RENDER MODES
 // ————————————————————————————————————————————————
 void (*renderers[])(void) {
+  modeColorFades,
   modeZoom,
-  modeSweepingDot,
   autumnalSparkle,
-  modeColorFades,  
-  modeBrightness,
   modePaletteMoving,
   modeWave
 };
@@ -136,10 +134,14 @@ void loop() {
   if ( button.pressed() ) {
     renderMode++;
     renderMode = mod8(renderMode, N_MODES);
+    // ensure radio is transmitting
+    if (transmitting == false) {
+      transmitting = true;
+      radio.stopListening();  
+    }
   }
 
-  // send/receive transmission
-  if (transmitting == true) {sendPayload();} else {getPayload();};
+  if (transmitting == false) {getPayload();};
 
   // animate
   if ( brightness > BRIGHTNESS_STEP + 1 ) {
@@ -148,6 +150,8 @@ void loop() {
     FastLED.clear();
   }
   FastLED.show();
+
+  if (transmitting == true) {sendPayload();};
 }
 
 
@@ -192,18 +196,18 @@ void getPayload() {
 
 void modeZoom() {
   
-  static bool active = true;
   static bool zoomForward = true;
   static uint8_t zoomHue = 0;
   static int8_t zoomIndex = 0;
   static uint8_t zooms = 3;
   static uint8_t zoomCount = 0;
 
+  // trident
+  
 
   // new trigger
-  if ( active == false && trigger == true ) {
+  if ( transmitting == false && trigger == true ) {
     trigger = false;
-    active = true;
     zooms = random(1,3);
     transmitting = true;
     radio.stopListening();
@@ -212,7 +216,8 @@ void modeZoom() {
   EVERY_N_MILLISECONDS(10) {
 
     fadeToBlackBy(ledsTube, NUM_LEDS_TUBE, 20);
-    if (active == true) {
+    if (transmitting == true) {
+      fill_solid(ledsTrident, NUM_LEDS_TRIDENT, CHSV(200, 255, 150));
       ledsTube[NUM_LEDS_TUBE-zoomIndex-1] = CHSV(zoomHue++, 255, 255);
       if ( zoomForward) {zoomIndex++;} else {zoomIndex--;};
   
@@ -225,7 +230,6 @@ void modeZoom() {
           trigger = true;
           sendPayload();
           trigger = false;
-          active = false;
           zoomCount = 0;
           transmitting = false;
           radio.startListening();
@@ -236,21 +240,10 @@ void modeZoom() {
         zoomIndex++;
         zoomForward = true;
       }
+    } else {
+      fill_solid(ledsTrident, NUM_LEDS_TRIDENT, CHSV(0, 0, 0));
     }
   }
-}
-
-
-void modeSweepingDot() {
-  currentPalette = autumnal;
-  
-  static uint8_t hue;
-
-  hue = beatsin8(10, 0, 20);
-  
-  fadeToBlackBy(ledsTube, NUM_LEDS_TUBE, 10);
-  uint8_t pos = beatsin8(13, 0, NUM_LEDS_TUBE-1);
-  ledsTube[pos] = CHSV(hue, 255, 255);
 }
 
 void modePaletteMoving() {
@@ -266,7 +259,7 @@ void modePalette(){
 
 void autumnalSparkle(){
   
-  currentPalette = autumnal;
+  static CRGBPalette16 palette = autumnal;
   const uint8_t noiseSpeedParam = 2; // lower value = faster color changes
   static uint8_t noiseScale = 100; // higher number = choppier (more variation between LEDs)
   static uint16_t noiseDist = random(12345); // random number for noise generator
@@ -276,13 +269,13 @@ void autumnalSparkle(){
     
   for(uint8_t i=0; i<NUM_LEDS_TUBE; i++) {
     colorIndex = inoise8(i*noiseScale, i*noiseScale + noiseDist + millis()/noiseSpeedParam);
-    brightness = beatsin8(30, 150, 255, 0, i*100);
-    ledsTube[i] = ColorFromPalette( currentPalette, colorIndex, brightness, LINEARBLEND);
+    brightness = beatsin8(30, 100, 255, 0, i*70);
+    ledsTube[i] = ColorFromPalette( palette, colorIndex, brightness, LINEARBLEND);
   }
   for(uint8_t i=0; i<NUM_LEDS_TRIDENT; i++) {
     colorIndex = inoise8(i*noiseScale, i*noiseScale + noiseDist + millis()/noiseSpeedParam);
-    brightness = beatsin8(30, 150, 255, 0, i*100);
-    ledsTrident[i] = ColorFromPalette( currentPalette, colorIndex, brightness, LINEARBLEND);
+    brightness = beatsin8(30, 100, 255, 0, i*100);
+    ledsTrident[i] = ColorFromPalette( palette, colorIndex, brightness, LINEARBLEND);
   }  
 }
 
@@ -310,7 +303,7 @@ void modeColorFades() {
 //  static uint8_t hue = 213;
   static uint8_t min_brightness = 0;
   static uint8_t max_brightness = 255;
-  static uint8_t bpm = 60;
+  static uint8_t bpm = 30;
 
   static bool peaked = false; // when brightness dips below peak, we're ready for color change as soon as we've reached trough
   static uint8_t current_brightness = 0;
@@ -328,6 +321,9 @@ void modeColorFades() {
   }
   
   fill_solid(ledsTube, NUM_LEDS_TUBE, CHSV( colors[color_idx], 255, current_brightness ));
+  fill_solid(ledsTrident, NUM_LEDS_TRIDENT, CHSV( colors[color_idx], 255, current_brightness ));
+  param1 = color_idx;
+  param2 = current_brightness;
 }
 
 
@@ -384,7 +380,7 @@ void modeWave() {
         
         if ( waveOffset < 256 ) { // has wave not passed given LED yet?
           static uint8_t power = 3;  // higher pow => longer tails:
-          uint16_t param = pow(quadwave8(waveOffset), power);
+          uint64_t param = pow(quadwave8(waveOffset), power);
 
           // brightness
           uint8_t b = map(param, 0, pow(255, power), waterBright, waveBright); // blend brightness between standing water and wave peak
@@ -441,7 +437,7 @@ void modeWave() {
 // ————————————————————————————————————————————————
 
 void updatePalette() {
-  EVERY_N_SECONDS( 10 ) {
+  EVERY_N_SECONDS( 5 ) {
     currentPaletteNo = addmod8( currentPaletteNo, 1, gradientPaletteCount);
     targetPalette = gradientPalettes[ currentPaletteNo ];
   }

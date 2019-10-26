@@ -41,4 +41,4 @@ DEFINE_GRADIENT_PALETTE( pink_purp ) {
 
 DEFINE_GRADIENT_PALETTE( autumnal ) {
   0,    255, 0, 0,
-  255,  255, 100, 0};
+  255,  255, 45, 0};

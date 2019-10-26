@@ -23,7 +23,7 @@ bool transmitting = false;
 
 typedef struct {
   uint8_t brightness;
-  bool mode;
+  uint8_t mode;
   bool trigger;
   uint8_t param1;
   uint8_t param2;
@@ -59,8 +59,10 @@ uint8_t currentPaletteNo = 1;
 // RENDER MODES
 // ————————————————————————————————————————————————
 void (*renderers[])(void) {
+  modeColorFades,
   modeZoom,
-  modePaletteSimple,
+  autumnalSparkle,
+  modePaletteMoving,
   modeWave
 };
 #define N_MODES (sizeof(renderers) / sizeof(renderers[0]));
@@ -94,8 +96,7 @@ void setup() {
 // ————————————————————————————————————————————————
 void loop() {
   
-  // send/receive transmission
-  if (transmitting == true) {sendPayload();} else {getPayload();};
+  if (transmitting == false) {getPayload();};
 
   // animate
   if ( brightness > 5 ) {
@@ -104,6 +105,8 @@ void loop() {
     clear();
   }
   show();
+
+  if (transmitting == true) {sendPayload();};
 }
 
 // METHODS
@@ -120,10 +123,7 @@ void show() {
 
 void clear() {
   FastLED.clear();
-  for ( uint8_t i=0; i<NUM_LEDS_JEWEL; i++ ) {
-    jewel.setPixelColor(i, jewel.Color(0, 0, 0, 0));
-  }
-  jewel.show();
+  jewel.clear();
 }
 
 void sendPayload() {
@@ -164,27 +164,26 @@ void getPayload() {
 
 void modeZoom() {
   
-  static bool active = false;
   static bool zoomForward = false;
   static uint8_t zoomHue = 0;
   static int8_t zoomIndex = NUM_LEDS_STRIP - 1;
   static uint8_t zooms = 0;
   static uint8_t zoomCount = 0;
 
-
   // new trigger
-  if ( active == false && trigger == true ) {
+  if ( transmitting == false && trigger == true ) {
     trigger = false;
-    active = true;
     zooms = random(1,3);
     transmitting = true;
     radio.stopListening();
   }
-
+  
   EVERY_N_MILLISECONDS(10) {
 
     fadeToBlackBy(ledsStrip, NUM_LEDS_STRIP, 20);
-    if (active == true) {
+    if (transmitting == true) {
+      //jewel
+      jewel.fill(jewel.Color(180, 0, 255));
       ledsStrip[NUM_LEDS_STRIP-zoomIndex-1] = CHSV(zoomHue++, 255, 255);
       if ( zoomForward) {zoomIndex++;} else {zoomIndex--;};
   
@@ -197,23 +196,60 @@ void modeZoom() {
           trigger = true;
           sendPayload();
           trigger = false;
-          active = false;
           zoomCount = 0;
           transmitting = false;
           radio.startListening();
         }
       }
-  
+      
       if ( zoomIndex < 0 ) {
         zoomIndex++;
         zoomForward = true;
       }
+    } else {
+      jewel.clear();
     }
   }
 }
 
+void modeColorFades() {
 
-void modePaletteSimple() {
+  const uint8_t colors[] = {150, 200, 230};
+  const uint8_t color_count (sizeof(colors) / sizeof(colors[0]));
+  static uint8_t color_idx = 0;
+  static uint8_t current_brightness = 0;
+
+  color_idx = param1;
+  current_brightness = param2;
+  
+  fill_solid(ledsStrip, NUM_LEDS_STRIP, CHSV( colors[color_idx], 255, current_brightness ));
+  for ( uint8_t i=0; i<NUM_LEDS_JEWEL; i++ ) {
+    jewel.setPixelColor(i, jewel.Color(ledsStrip[0].r, ledsStrip[0].g, ledsStrip[0].b, 0));
+  }
+}
+
+
+void autumnalSparkle(){
+  
+  static CRGBPalette16 palette = autumnal;
+  const uint8_t noiseSpeedParam = 2; // lower value = faster color changes
+  static uint8_t noiseScale = 100; // higher number = choppier (more variation between LEDs)
+  static uint16_t noiseDist = random(12345); // random number for noise generator
+  
+  static uint8_t colorIndex = 0;
+  static uint8_t brightness = 0;
+    
+  for(uint8_t i=0; i<NUM_LEDS_STRIP; i++) {
+    colorIndex = inoise8(i*noiseScale, i*noiseScale + noiseDist + millis()/noiseSpeedParam);
+    brightness = beatsin8(30, 100, 255, 0, i*100);
+    ledsStrip[i] = ColorFromPalette( palette, colorIndex, brightness, LINEARBLEND);
+  }
+  for ( uint8_t i=0; i<NUM_LEDS_JEWEL; i++ ) {
+    jewel.setPixelColor(i, jewel.Color(ledsStrip[i].r, ledsStrip[i].g, ledsStrip[i].b, 0));
+  }
+}
+
+void modePaletteMoving() {
   updatePalette();
   fillFromPaletteSimple(ledsStrip, NUM_LEDS_STRIP, currentPalette);
 
@@ -275,16 +311,16 @@ void modeWave() {
         
         if ( waveOffset < 256 ) { // has wave not ended yet?
           static uint8_t power = 2;  // higher pow => longer tails:
-          uint16_t param = pow(quadwave8(waveOffset), power);
+          uint64_t param = pow(quadwave8(waveOffset), power);
 
           // brightness
-          uint8_t b = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterBright, waveBright); // blend brightness between standing water and wave peak
+          uint8_t b = map(param, 0, pow(255, power), waterBright, waveBright); // blend brightness between standing water and wave peak
           // position within wave is defined by brightness, so use that as x coord in noise function
 //          int8_t noise = scale8( maxNoisePct*b*2/100, inoise8(b*noiseScale, b*noiseScale + noiseDist + millis()/noiseSpeedParam) ) - maxNoisePct*b/100;
 //          b = ( noise > 0 ) ? qadd8(b, noise) : max(b + noise, waterBright); // add or subtract noise, in [waterBright, 255]
 
           // saturation
-          uint8_t s = map(pow(quadwave8(waveOffset), power), 0, pow(255, power), waterSat, waveSat); // blend saturation between standing water and wave peak
+          uint8_t s = map(param, 0, pow(255, power), waterSat, waveSat); // blend saturation between standing water and wave peak
 //          s = ( noise > 0 ) ? qadd8(s, noise) : max(s + noise, waterSat); // add or subtract noise, in [waterSat, 255]
           nextCHSV = CHSV(hue, s, b);
           break;
@@ -309,7 +345,7 @@ void modeWave() {
 // ————————————————————————————————————————————————
 
 void updatePalette() {
-  EVERY_N_SECONDS( 10 ) {
+  EVERY_N_SECONDS( 5 ) {
     currentPaletteNo = addmod8( currentPaletteNo, 1, gradientPaletteCount);
     targetPalette = gradientPalettes[ currentPaletteNo ];
   }
