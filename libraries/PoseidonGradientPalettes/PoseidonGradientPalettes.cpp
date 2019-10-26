@@ -37,9 +37,8 @@ DEFINE_GRADIENT_PALETTE( wave ) {
 
 DEFINE_GRADIENT_PALETTE( pink_purp ) {
  0,     104, 49, 255,
- 255,   248, 31, 255}; 
+ 255,   248, 31, 255};
 
-
- // DEFINE_GRADIENT_PALLETE( pink_purp ) {
- // 0,  104, 49, 255,
- // 255, 248, 31, 255};
+DEFINE_GRADIENT_PALETTE( autumnal ) {
+  0,    255, 0, 0,
+  255,  255, 100, 0};

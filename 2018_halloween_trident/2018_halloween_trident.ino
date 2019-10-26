@@ -73,13 +73,15 @@ uint8_t currentPaletteNo = 1;
 // RENDER MODES
 // ————————————————————————————————————————————————
 void (*renderers[])(void) {
-  modePaletteSimple,
+  modeSweepingDot,
+  autumnalSparkle,
+  modeColorFades,  
+  modeBrightness,
+  modePaletteMoving,
   modeWave
-//  modeTest,
-//  modeBrightness,
 };
 #define N_MODES (sizeof(renderers) / sizeof(renderers[0]))
-uint8_t renderMode = 1;
+uint8_t renderMode = 0;
 
 
 
@@ -147,15 +149,6 @@ void loop() {
 
 // METHODS
 // ————————————————————————————————————————————————
-void updatePalette() {
-  EVERY_N_SECONDS( 10 ) {
-    currentPaletteNo = addmod8( currentPaletteNo, 1, gradientPaletteCount);
-    targetPalette = gradientPalettes[ currentPaletteNo ];
-  }
-  EVERY_N_MILLISECONDS(100) {
-    nblendPaletteTowardPalette( currentPalette, targetPalette, 16);
-  }  
-}
 
 void sendPayload() {
   Payload _p = { brightness, renderMode, trigger, param1, param2, param3 };
@@ -165,10 +158,75 @@ void sendPayload() {
 
 // ANIMATION MODES
 // ————————————————————————————————————————————————
-void modePaletteSimple() {
+
+void modeZoom() {
+  
+  static bool zoomForward = 1;
+  static uint8_t zoomHue = 0;
+  static uint8_t zoomIndex = 0;
+
+  EVERY_N_MILLISECONDS(10) {
+    
+    uint8_t secondHand = (millis() / 1000) % 60;
+    // Only light up if we are in the 2 second interval (or are finishing up)
+    if ((secondHand % 10 < 2) or ( zoomIndex < NUM_LEDS_TUBE - 1 and zoomIndex > 0 )) {
+      ledsTube[zoomIndex] = CHSV(zoomHue++, 255, 255);
+      if ( zoomForward) {zoomIndex++;} else {zoomIndex--;};
+
+      if ( zoomIndex > NUM_LEDS_TUBE - 1 || zoomIndex < 0 ) {
+        zoomForward = !zoomForward;
+      }
+    }
+
+    fadeToBlackBy(ledsTube, NUM_LEDS_TUBE, 20);
+
+  }
+}
+
+
+void modeSweepingDot() {
+  currentPalette = autumnal;
+  
+  static uint8_t hue;
+
+  hue = beatsin8(10, 0, 20);
+  
+  fadeToBlackBy(ledsTube, NUM_LEDS_TUBE, 10);
+  uint8_t pos = beatsin8(13, 0, NUM_LEDS_TUBE-1);
+  ledsTube[pos] = CHSV(hue, 255, 255);
+}
+
+void modePaletteMoving() {
   updatePalette();
-  fillFromPaletteSimple(ledsTrident, NUM_LEDS_TRIDENT, currentPalette);
-  fillFromPaletteSimple(ledsTube, NUM_LEDS_TUBE, currentPalette);
+  fillFromPaletteMoving(ledsTrident, NUM_LEDS_TRIDENT, currentPalette);
+  fillFromPaletteMoving(ledsTube, NUM_LEDS_TUBE, currentPalette);
+}
+
+void modePalette(){
+  currentPalette = autumnal;
+  fillFromPalette(ledsTube, NUM_LEDS_TUBE, currentPalette);
+}
+
+void autumnalSparkle(){
+  
+  currentPalette = autumnal;
+  const uint8_t noiseSpeedParam = 2; // lower value = faster color changes
+  static uint8_t noiseScale = 100; // higher number = choppier (more variation between LEDs)
+  static uint16_t noiseDist = random(12345); // random number for noise generator
+  
+  static uint8_t colorIndex = 0;
+  static uint8_t brightness = 0;
+    
+  for(uint8_t i=0; i<NUM_LEDS_TUBE; i++) {
+    colorIndex = inoise8(i*noiseScale, i*noiseScale + noiseDist + millis()/noiseSpeedParam);
+    brightness = beatsin8(30, 150, 255, 0, i*100);
+    ledsTube[i] = ColorFromPalette( currentPalette, colorIndex, brightness, LINEARBLEND);
+  }
+  for(uint8_t i=0; i<NUM_LEDS_TRIDENT; i++) {
+    colorIndex = inoise8(i*noiseScale, i*noiseScale + noiseDist + millis()/noiseSpeedParam);
+    brightness = beatsin8(30, 150, 255, 0, i*100);
+    ledsTrident[i] = ColorFromPalette( currentPalette, colorIndex, brightness, LINEARBLEND);
+  }  
 }
 
 
@@ -185,14 +243,34 @@ void modeBrightness() {
   }
 }
 
-void modeTest() {
-  
-  static uint8_t j = 0;
 
-  j = ( millis()/10 ) % 255;
-//  ledsTube[8] = CHSV(215, 255, sin8(j));
-  ledsTube[8] = CHSV(215, 255, cubicwave8(j));
-  ledsTube[10] = CHSV(215, 255, quadwave8(j));
+void modeColorFades() {
+
+  const uint8_t colors[] = {150, 200, 230};
+  const uint8_t color_count (sizeof(colors) / sizeof(colors[0]));
+  static uint8_t color_idx = 0;
+  
+//  static uint8_t hue = 213;
+  static uint8_t min_brightness = 0;
+  static uint8_t max_brightness = 255;
+  static uint8_t bpm = 60;
+
+  static bool peaked = false; // when brightness dips below peak, we're ready for color change as soon as we've reached trough
+  static uint8_t current_brightness = 0;
+  static uint8_t last_brightness = 0;
+
+  last_brightness = current_brightness;
+  current_brightness = beatsin8(bpm, min_brightness, max_brightness, 0, 0);
+  
+  if (current_brightness < last_brightness) {
+    peaked = true;
+  }
+  if ( current_brightness > last_brightness && peaked == true ) {
+    color_idx = addmod8(color_idx, 1, color_count);
+    peaked = false;
+  }
+  
+  fill_solid(ledsTube, NUM_LEDS_TUBE, CHSV( colors[color_idx], 255, current_brightness ));
 }
 
 
@@ -301,46 +379,35 @@ void modeWave() {
 }
 
 
-// ANIMATIONS
+// ANIMATION HELPRS
 // ————————————————————————————————————————————————
 
-void fillFromPaletteSimple(CRGB* ledArray, uint16_t numLeds, CRGBPalette16& palette) {
+void updatePalette() {
+  EVERY_N_SECONDS( 10 ) {
+    currentPaletteNo = addmod8( currentPaletteNo, 1, gradientPaletteCount);
+    targetPalette = gradientPalettes[ currentPaletteNo ];
+  }
+  EVERY_N_MILLISECONDS(100) {
+    nblendPaletteTowardPalette( currentPalette, targetPalette, 16);
+  }  
+}
+
+
+void fillFromPalette(CRGB* ledArray, uint16_t numLeds, CRGBPalette16& palette) {
+  fill_palette( ledArray, numLeds, 0, (256 / numLeds) + 1, palette, 255, LINEARBLEND);
+}
+
+void fillFromPaletteMoving(CRGB* ledArray, uint16_t numLeds, CRGBPalette16& palette) {
   uint8_t startIndex = millis() / 8;
   fill_palette( ledArray, numLeds, startIndex, (256 / numLeds) + 1, palette, 255, LINEARBLEND);
 }
 
 
+
+
+
 // GRADIENTS
 // ————————————————————————————————————————————————
-
-//DEFINE_GRADIENT_PALETTE( green_to_blue ) {
-//    0,   0,  0,  0,
-//   39,   7, 55,  8,
-//   
-//   99,  42,255, 45,
-//  119,   2, 25,216,
-//  145,   7, 10, 99,
-//  186,  15,  2, 31,
-//  233,   2,  1,  5,
-//  255,   0,  0,  0};
-//
-//DEFINE_GRADIENT_PALETTE( bhw1_14_gp ) {
-//    0,   0,  0,  0,
-//   12,   1,  1,  3,
-//   53,   8,  1, 22,
-//   80,   4,  6, 89,
-//  119,   2, 25,216,
-//  145,   7, 10, 99,
-//  186,  15,  2, 31,
-//  233,   2,  1,  5,
-//  255,   0,  0,  0};
-//
-//DEFINE_GRADIENT_PALETTE( bhw1_greeny_gp ) {
-//    0,   0,  0,  0,
-//   39,   7, 55,  8,
-//   99,  42,255, 45,
-//  153,   7, 55,  8,
-//  255,   0,  0,  0};  
 
 const TProgmemRGBGradientPalettePtr gradientPalettes[] = {
 //  green_to_blue,
