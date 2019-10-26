@@ -31,7 +31,8 @@ uint8_t orientation;
 #define CE_PIN 1
 #define CSN_PIN 0
 RF24 radio(CE_PIN, CSN_PIN);
-const byte address[6] = "00001";
+const byte addresses[][6] = {"00001", "00002"};
+bool transmitting = true;
 
 // define struct for sending payload
 typedef struct {
@@ -73,6 +74,7 @@ uint8_t currentPaletteNo = 1;
 // RENDER MODES
 // ————————————————————————————————————————————————
 void (*renderers[])(void) {
+  modeZoom,
   modeSweepingDot,
   autumnalSparkle,
   modeColorFades,  
@@ -96,9 +98,10 @@ void setup() {
   accel.setRange(MMA8451_RANGE_2_G);
 
   radio.begin();
-  radio.openWritingPipe(address);
+  radio.openWritingPipe(addresses[1]);
+  radio.openReadingPipe(1, addresses[0]); // pipe 0 is used for writing, so we use pipe 1 so startListening() doesn't overwrite the writing pipe
   radio.setPALevel(RF24_PA_MIN);
-  radio.stopListening();
+  if (transmitting == true) {radio.stopListening();} else {radio.startListening();};
 
   FastLED.addLeds<NEOPIXEL, PIN_STRIP_TRIDENT>(ledsTrident, NUM_LEDS_TRIDENT);
   FastLED.addLeds<NEOPIXEL, PIN_STRIP_TUBE>(ledsTube, NUM_LEDS_TUBE);
@@ -135,7 +138,8 @@ void loop() {
     renderMode = mod8(renderMode, N_MODES);
   }
 
-  sendPayload();
+  // send/receive transmission
+  if (transmitting == true) {sendPayload();} else {getPayload();};
 
   // animate
   if ( brightness > BRIGHTNESS_STEP + 1 ) {
@@ -155,31 +159,84 @@ void sendPayload() {
   radio.write(&_p, sizeof(_p));    
 }
 
+void getPayload() {
+
+  if ( !radio.available() ) {
+    return;
+  }
+  
+  Payload _p = {};
+  radio.read(&_p, sizeof(_p));
+
+  // set LED brightness
+  if ( _p.brightness != brightness ) {
+    brightness = _p.brightness;
+    FastLED.setBrightness(brightness);
+  }
+
+  // set animation mode
+  renderMode = _p.mode;
+  
+  // new trigger?
+  trigger = _p.trigger;
+
+  // params
+  param1 = _p.param1;
+  param2 = _p.param2;
+  param3 = _p.param3;
+}
+
 
 // ANIMATION MODES
 // ————————————————————————————————————————————————
 
 void modeZoom() {
   
-  static bool zoomForward = 1;
+  static bool active = true;
+  static bool zoomForward = true;
   static uint8_t zoomHue = 0;
-  static uint8_t zoomIndex = 0;
+  static int8_t zoomIndex = 0;
+  static uint8_t zooms = 3;
+  static uint8_t zoomCount = 0;
+
+
+  // new trigger
+  if ( active == false && trigger == true ) {
+    trigger = false;
+    active = true;
+    zooms = map(random8(), 0, 255, 1, 2);
+    transmitting = true;
+    radio.stopListening();
+  }
 
   EVERY_N_MILLISECONDS(10) {
-    
-    uint8_t secondHand = (millis() / 1000) % 60;
-    // Only light up if we are in the 2 second interval (or are finishing up)
-    if ((secondHand % 10 < 2) or ( zoomIndex < NUM_LEDS_TUBE - 1 and zoomIndex > 0 )) {
-      ledsTube[zoomIndex] = CHSV(zoomHue++, 255, 255);
-      if ( zoomForward) {zoomIndex++;} else {zoomIndex--;};
-
-      if ( zoomIndex > NUM_LEDS_TUBE - 1 || zoomIndex < 0 ) {
-        zoomForward = !zoomForward;
-      }
-    }
 
     fadeToBlackBy(ledsTube, NUM_LEDS_TUBE, 20);
-
+    if (active == true) {
+      ledsTube[NUM_LEDS_TUBE-zoomIndex-1] = CHSV(zoomHue++, 255, 255);
+      if ( zoomForward) {zoomIndex++;} else {zoomIndex--;};
+  
+      if ( zoomIndex > NUM_LEDS_TUBE - 1 ) {
+        zoomIndex--;
+        zoomForward = false;
+        zoomCount++;
+        Serial.println(zoomCount);
+        if ( zoomCount == zooms ) {
+          trigger = true;
+          sendPayload();
+          trigger = false;
+          active = false;
+          zoomCount = 0;
+          transmitting = false;
+          radio.startListening();
+        }
+      }
+  
+      if ( zoomIndex < 0 ) {
+        zoomIndex++;
+        zoomForward = true;
+      }
+    }
   }
 }
 
@@ -356,6 +413,7 @@ void modeWave() {
   // when wave has reached last LED, trigger wave start in crown
   if ( lastLedCurrentBrightness > lastLedLastBrightness && triggered == false ) {
     trigger = true;
+    triggered = true;
   } else {
     trigger = false;
   }

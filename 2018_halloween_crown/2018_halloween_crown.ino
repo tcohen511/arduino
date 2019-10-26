@@ -18,7 +18,8 @@
 #define CE_PIN 3
 #define CSN_PIN 4
 RF24 radio(CE_PIN, CSN_PIN);
-const byte address[6] = "00001";
+const byte addresses[][6] = {"00001", "00002"};
+bool transmitting = false;
 
 typedef struct {
   uint8_t brightness;
@@ -58,6 +59,7 @@ uint8_t currentPaletteNo = 1;
 // RENDER MODES
 // ————————————————————————————————————————————————
 void (*renderers[])(void) {
+  modeZoom,
   modePaletteSimple,
   modeWave
 };
@@ -73,9 +75,10 @@ void setup() {
   delay(1000);
   
   radio.begin();
-  radio.openReadingPipe(0, address);
+  radio.openWritingPipe(addresses[0]);
+  radio.openReadingPipe(1, addresses[1]);// pipe 0 is used for writing, so we use pipe 1 so startListening() doesn't overwrite the writing pipe
   radio.setPALevel(RF24_PA_MIN);
-  radio.startListening();  
+  if (transmitting == true) {radio.stopListening();} else {radio.startListening();};
   
   FastLED.addLeds<NEOPIXEL, PIN_STRIP>(ledsStrip, NUM_LEDS_STRIP);
   jewel = Adafruit_NeoPixel(NUM_LEDS_JEWEL, PIN_JEWEL, NEO_GRBW + NEO_KHZ800);
@@ -91,8 +94,8 @@ void setup() {
 // ————————————————————————————————————————————————
 void loop() {
   
-  // receive transmission
-  getPayload();
+  // send/receive transmission
+  if (transmitting == true) {sendPayload();} else {getPayload();};
 
   // animate
   if ( brightness > 5 ) {
@@ -123,6 +126,11 @@ void clear() {
   jewel.show();
 }
 
+void sendPayload() {
+  Payload _p = { brightness, renderMode, trigger, param1, param2, param3 };
+  radio.write(&_p, sizeof(_p));    
+}
+
 void getPayload() {
 
   if ( !radio.available() ) {
@@ -150,20 +158,60 @@ void getPayload() {
   param3 = _p.param3;
 }
 
-void updatePalette() {
-  EVERY_N_SECONDS( 10 ) {
-    currentPaletteNo = addmod8( currentPaletteNo, 1, gradientPaletteCount);
-    targetPalette = gradientPalettes[ currentPaletteNo ];
-  }
-//  nblendPaletteTowardPalette( currentPalette, targetPalette, 16);
-  EVERY_N_MILLISECONDS(100) {
-    nblendPaletteTowardPalette( currentPalette, targetPalette, 16);
-  }  
-}
-
 
 // ANIMATION MODES
 // ————————————————————————————————————————————————
+
+void modeZoom() {
+  
+  static bool active = false;
+  static bool zoomForward = false;
+  static uint8_t zoomHue = 0;
+  static int8_t zoomIndex = NUM_LEDS_STRIP - 1;
+  static uint8_t zooms = 3;
+  static uint8_t zoomCount = 0;
+
+
+  // new trigger
+  if ( active == false && trigger == true ) {
+    trigger = false;
+    active = true;
+    zooms = map(random8(), 0, 255, 1, 2);
+    transmitting = true;
+    radio.stopListening();
+  }
+
+  EVERY_N_MILLISECONDS(10) {
+
+    fadeToBlackBy(ledsStrip, NUM_LEDS_STRIP, 20);
+    if (active == true) {
+      ledsStrip[NUM_LEDS_STRIP-zoomIndex-1] = CHSV(zoomHue++, 255, 255);
+      if ( zoomForward) {zoomIndex++;} else {zoomIndex--;};
+  
+      if ( zoomIndex > NUM_LEDS_STRIP - 1 ) {
+        zoomIndex--;
+        zoomForward = false;
+        zoomCount++;
+        Serial.println(zoomCount);
+        if ( zoomCount == zooms ) {
+          trigger = true;
+          sendPayload();
+          trigger = false;
+          active = false;
+          zoomCount = 0;
+          transmitting = false;
+          radio.startListening();
+        }
+      }
+  
+      if ( zoomIndex < 0 ) {
+        zoomIndex++;
+        zoomForward = true;
+      }
+    }
+  }
+}
+
 
 void modePaletteSimple() {
   updatePalette();
@@ -214,6 +262,7 @@ void modeWave() {
     lastWaveStart = millis();
     waveWidthParam = random8(waveWidthParamMin, waveWidthParamMax); // vary wave width
 //    noiseDist = random(12345);
+    trigger = false;
   }
 
   // animate
@@ -253,32 +302,22 @@ void modeWave() {
       ledsStrip[midLed+i] = nextCHSV;
     }        
   }    
-
-//  19: 9
-//  18: 8
-//  17: 7
-//  16: 6
-//  15: 5
-//  14: 4
-//  13: 3
-//  12: 2
-//  11: 1
-//  10: 0
-//  9: 1
-//  8: 2
-//  7: 3
-//  6: 4
-//  5: 5
-//  4: 6
-//  3: 7
-//  2: 8
-//  1: 9
-//  0: 10
 }
 
 
-// ANIMATIONS
+// ANIMATION HELPERS
 // ————————————————————————————————————————————————
+
+void updatePalette() {
+  EVERY_N_SECONDS( 10 ) {
+    currentPaletteNo = addmod8( currentPaletteNo, 1, gradientPaletteCount);
+    targetPalette = gradientPalettes[ currentPaletteNo ];
+  }
+//  nblendPaletteTowardPalette( currentPalette, targetPalette, 16);
+  EVERY_N_MILLISECONDS(100) {
+    nblendPaletteTowardPalette( currentPalette, targetPalette, 16);
+  }  
+}
 
 void fillFromPaletteSimple(CRGB* ledArray, uint16_t numLeds, CRGBPalette16& palette) {
   uint8_t startIndex = millis() / 8;
